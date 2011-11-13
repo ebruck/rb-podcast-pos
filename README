@@ -1,0 +1,20 @@
+-------------------------------------------------------------------------------
+rb-podcast-pos 0.1
+-------------------------------------------------------------------------------
+  Edward G. Bruck <ed.bruck1@gmail.com
+
+DESCRIPTION
+  
+  Save and restore podcast playing position
+
+INSTALL
+
+  Copy directory to:
+    * ~/.local/share/rhythmbox/plugins
+
+  So it looks like:
+    * ~/.local/share/rhythmbox/plugins/rb-podcast-pos
+
+LICENSE
+
+  rb-podcast-pos is distributed under the GPL Version 2.
