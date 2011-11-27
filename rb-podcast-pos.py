@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.   
 
 import pickle
+import urllib
 import os
 
 from gi.repository import GObject, Peas 
@@ -36,14 +37,17 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         except:
             self.pos_dict = {}
 
-    def purge_missing(self):
+    def purge_missing_and_save(self):
         to_purge = []
+                        
         for key in self.pos_dict:
-            if not self.db.entry_lookup_by_location(key):
+            if not os.path.isfile(urllib.unquote(key[7:])):
                 to_purge.append(key)
 
         for key in to_purge:
             del self.pos_dict[key]
+            
+        pickle.dump(self.pos_dict, open(self.data_file, 'wb'))            
 
     def do_activate(self):        
         shell = self.object        
@@ -62,7 +66,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         return song
 
     def do_deactivate(self):
-        self.purge_missing()
+        self.purge_missing_and_save()
 
         shell = self.object        
         shell.get_player().disconnect(self.psc_id1)
@@ -70,8 +74,6 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         self.psc_id1 = None
         self.psc_id2 = None
         self.db = None
-
-        pickle.dump(self.pos_dict, open(self.data_file, 'wb'))       
 
     def playing_song_changed(self, player, entry):       
         if entry:
