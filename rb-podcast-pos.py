@@ -1,6 +1,6 @@
 # -*- coding: utf8 -*-
 # 
-# Copyright (C) 2011  Edward G. Bruck <ed.bruck1@gmail.com>
+# Copyright (C) 2011-2014  Edward G. Bruck <ed.bruck1@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,8 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.   
 
 import pickle
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import os
+import time
 
 from gi.repository import GObject, Peas 
 from gi.repository import RB
@@ -41,7 +42,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         to_purge = []
                         
         for key in self.pos_dict:
-            if not os.path.isfile(urllib.unquote(key[7:])):
+            if not os.path.isfile(urllib.parse.unquote(key[7:])):
                 to_purge.append(key)
 
         for key in to_purge:
@@ -53,7 +54,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         shell = self.object        
         shell_player  = shell.props.shell_player
         
-        self.db = db = shell.props.db
+        self.db = shell.props.db
         self.psc_id1 = shell_player.connect('playing-song-changed', self.playing_song_changed)
         self.psc_id2 = shell_player.connect('elapsed-changed', self.elapsed_changed)        
 
@@ -69,8 +70,6 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         self.purge_missing_and_save()
 
         shell = self.object        
-        shell.get_player().disconnect(self.psc_id1)
-        shell.get_player().disconnect(self.psc_id2)
         self.psc_id1 = None
         self.psc_id2 = None
         self.db = None
@@ -78,13 +77,21 @@ class PodcastPos(GObject.Object, Peas.Activatable):
     def playing_song_changed(self, player, entry):       
         if entry:
             song_info = self.get_song_info(entry)
-            if self.pos_dict.has_key(song_info['location']):                
+            if song_info['location'] in self.pos_dict:                
                 new_pos = self.pos_dict[song_info['location']]
                 
                 if new_pos >= song_info['duration']-1:
                     return
-
-                player.set_playing_time(new_pos)
+                
+                # I'm sure there is a better way...
+                n=0
+                while(n<10):
+                    try:
+                        player.set_playing_time(new_pos)
+                        break
+                    except:
+                        time.sleep(0.1)
+                        ++n
 
     def elapsed_changed(self, player, pos):
         if pos > 0:

@@ -1,11 +1,11 @@
 -------------------------------------------------------------------------------
-rb-podcast-pos 0.1
+rb-podcast-pos 0.2
 -------------------------------------------------------------------------------
   Edward G. Bruck <ed.bruck1@gmail.com>
 
 DESCRIPTION
   
-  Save and restore podcast playing position (Rhythmbox 2.90.1)
+  Save and restore podcast playing position (Rhythmbox 3.0.2)
 
 INSTALL
 
