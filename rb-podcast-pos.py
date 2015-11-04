@@ -1,6 +1,4 @@
-# -*- coding: utf8 -*-
-# 
-# Copyright (C) 2011-2014  Edward G. Bruck <ed.bruck1@gmail.com>
+# Copyright (C) 2011-2015  Edward G. Bruck <ed.bruck1@gmail.com>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +17,14 @@ import pickle
 import urllib.request, urllib.parse, urllib.error
 import os
 import time
+import redis
+import socket
+
+REDIS_SERVER="redis"
+REDIS_PORT=6379
+REDIS_TIMEOUT=10
+RB_PODCAST_POS_SAVE_INTERVAL=60
+MAX_FILE_LIST=256
 
 from gi.repository import GObject, Peas 
 from gi.repository import RB
@@ -33,22 +39,28 @@ class PodcastPos(GObject.Object, Peas.Activatable):
 
         self.data_file = os.path.expanduser("~") + "/.rb-podcast-pos"
         
+        self.last_update = int(time.time())
+
         try:
-            self.pos_dict = pickle.load(open(self.data_file, 'rb'))
+            redis_conn = redis.Redis(REDIS_SERVER, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
+            self.pos_dict = pickle.loads(redis_conn.get("rb-podcast-pos"))
         except:
-            self.pos_dict = {}
+            try:
+                self.pos_dict = pickle.load(open(self.data_file, 'rb'))
+            except:
+                self.pos_dict = {}
 
     def purge_missing_and_save(self):
-        to_purge = []
-                        
-        for key in self.pos_dict:
-            if not os.path.isfile(urllib.parse.unquote(key[7:])):
-                to_purge.append(key)
+        if len(self.pos_dict) >= MAX_FILE_LIST:
+            to_purge = []
+            for key in self.pos_dict:
+                if not os.path.isfile(urllib.parse.unquote(key[7:])):
+                    to_purge.append(key)
 
-        for key in to_purge:
-            del self.pos_dict[key]
+                    for key in to_purge:
+                        del self.pos_dict[key]
             
-        pickle.dump(self.pos_dict, open(self.data_file, 'wb'))            
+        self.save_podcast_pos()
 
     def do_activate(self):        
         shell = self.object        
@@ -101,3 +113,19 @@ class PodcastPos(GObject.Object, Peas.Activatable):
                 song_info = self.get_song_info(entry)
                 if "Podcast" == song_info['genre']:
                     self.pos_dict[song_info['location']] = pos
+
+                    if  int(time.time()) - self.last_update >= RB_PODCAST_POS_SAVE_INTERVAL:
+                        self.save_podcast_pos()                       
+
+    def save_podcast_pos(self):
+        pickle_data = pickle.dumps(self.pos_dict)
+        open(self.data_file, 'wb').write(pickle_data)
+
+        try:
+            redis_conn = redis.Redis(REDIS_SERVER, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
+            redis_conn.set("rb-podcast-pos", pickle_data)
+            redis_conn.set("rb-podcast-pos-timestamp", socket.gethostname() + "@" + time.strftime("%c") +", " + str(len(self.pos_dict)))
+        except:
+            pass
+
+        self.last_update = int(time.time())

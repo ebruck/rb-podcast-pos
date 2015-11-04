@@ -5,5 +5,8 @@ IAge=1
 Name=Podcast Position Saver
 Description=Save and restore podcast playing position
 Authors=Edward G. Bruck <ed.bruck1@gmail.com>
-Copyright=Copyright © 2011-2014 Edward G. Bruck
+Copyright=Copyright © 2011-2015 Edward G. Bruck
 Website=https://github.com/ebruck/rb-podcast-pos
+
+[RB]
+InitiallyEnabled=true
