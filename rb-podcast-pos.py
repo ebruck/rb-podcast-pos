@@ -84,6 +84,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         self.db = shell.props.db
         self.psc_id1 = shell_player.connect('playing-song-changed', self.playing_song_changed)
         self.psc_id2 = shell_player.connect('elapsed-changed', self.elapsed_changed)
+        self.pcs_id3 = shell_player.connect('playing-changed', self.playing_changed)
 
     def get_song_info(self, entry):
         song = {
@@ -99,7 +100,16 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         shell = self.object
         self.psc_id1 = None
         self.psc_id2 = None
+        self.psc_id3 = None
         self.db = None
+
+    def playing_changed(self, player, playing):
+        entry = player.get_playing_entry()
+        if entry:
+            song_info = self.get_song_info(entry)
+            if not playing:
+                if 'Podcast' == song_info['genre']:
+                   self.save_podcast_pos()
 
     def playing_song_changed(self, player, entry):
         if entry:
