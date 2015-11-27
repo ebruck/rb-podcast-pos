@@ -44,8 +44,13 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         self.last_save = int(time.time())
         self.hostname = socket.gethostname()
 
+        # override if env variable exists
+        self.redis_server = os.getenv('REDIS_SERVER')
+        if not self.redis_server:
+            self.redis_server = REDIS_SERVER
+
         try:
-            redis_conn = redis.Redis(REDIS_SERVER, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
+            redis_conn = redis.Redis(self.redis_server, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
             self.pos_dict = json.loads(redis_conn.get('rb-podcast-pos:data').decode('utf8'))
             Notify.Notification.new("Loaded " + str(len(self.pos_dict)) + " entries from redis").show()
         except:
@@ -56,21 +61,20 @@ class PodcastPos(GObject.Object, Peas.Activatable):
 
     def purge_missing_and_save(self):
         to_purge = []
-        now = int(time.time())
 
         for key in self.pos_dict:
             # todo: remove the time check and only use for orphaned files after a lengthy interval
-            if now - self.pos_dict[key]['timestamp'] >= PURGE_TIME:
-                if self.hostname in self.pos_dict[key]['hosts']:
-                    if not os.path.isfile(urllib.parse.unquote(key[7:])):
-                        self.pos_dict[key]['hosts'].remove(self.hostname)
-                        # all hosts are gone, so we purge this entry
-                        if (len(self.pos_dict[key]['hosts']) == 0):
-                            to_purge.append(key)
+            # if now - self.pos_dict[key]['timestamp'] >= PURGE_TIME:
+            if self.hostname in self.pos_dict[key]['hosts']:
+                if not os.path.isfile(urllib.parse.unquote(key[7:])):
+                    self.pos_dict[key]['hosts'].remove(self.hostname)
+                    # if all hosts are gone, so we purge this entry
+                    if len(self.pos_dict[key]['hosts']) == 0:
+                        to_purge.append(key)
 
         if len(to_purge):
             try:
-                redis_conn = redis.Redis(REDIS_SERVER, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
+                redis_conn = redis.Redis(self.redis_server, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
             except:
                 redis_conn = None
 
@@ -91,16 +95,20 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         self.psc_id2 = shell_player.connect('elapsed-changed', self.elapsed_changed)
         self.pcs_id3 = shell_player.connect('playing-changed', self.playing_changed)
 
-    def get_song_info(self, entry):
+    @staticmethod
+    def get_song_info(entry):
         song = {
             'genre': entry.get_string(RB.RhythmDBPropType.GENRE),
             'duration': entry.get_ulong(RB.RhythmDBPropType.DURATION),
-            'location': entry.get_playback_uri()
+            'location': entry.get_playback_uri(),
+            'album': entry.get_string(RB.RhythmDBPropType.ALBUM),
+            'title': entry.get_string(RB.RhythmDBPropType.TITLE)
         }
         return song
 
     def do_deactivate(self):
         self.purge_missing_and_save()
+        Notify.Notification.new("Saved " + str(len(self.pos_dict)) + " entries to redis").show()
 
         Notify.uninit()
 
@@ -116,7 +124,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
             song_info = self.get_song_info(entry)
             if not playing:
                 if 'Podcast' == song_info['genre']:
-                   self.save_podcast_pos()
+                    self.save_podcast_pos()
 
     def playing_song_changed(self, player, entry):
         if entry:
@@ -133,7 +141,7 @@ class PodcastPos(GObject.Object, Peas.Activatable):
 
                 # I'm sure there is a better way...
                 n = 0
-                while (n < 10):
+                while n < 10:
                     try:
                         player.set_playing_time(new_pos)
                         break
@@ -147,11 +155,11 @@ class PodcastPos(GObject.Object, Peas.Activatable):
 
             if entry:
                 song_info = self.get_song_info(entry)
-                if 'Podcast' == song_info['genre']:
+                if 'Podcast' == song_info['genre'] and song_info['location'].startswith('file://'):
                     now = int(time.time())
 
                     if song_info['location'] not in self.pos_dict:
-                        self.pos_dict[song_info['location']] = {'timestamp': now, 'pos': pos, 'hosts' : [self.hostname]}
+                        self.pos_dict[song_info['location']] = {'timestamp': now, 'pos': pos, 'hosts': [self.hostname]}
                     else:
                         self.pos_dict[song_info['location']]['pos'] = pos
 
@@ -163,11 +171,10 @@ class PodcastPos(GObject.Object, Peas.Activatable):
         open(self.backup_file, 'w').write(json_data)
 
         try:
-            redis_conn = redis.Redis(REDIS_SERVER, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
+            redis_conn = redis.Redis(self.redis_server, socket_timeout=REDIS_TIMEOUT, port=REDIS_PORT)
             redis_conn.set('rb-podcast-pos:data', json_data)
             redis_conn.set('rb-podcast-pos:log',
                            self.hostname + '@' + time.strftime('%c') + ', count=' + str(len(self.pos_dict)))
-            Notify.Notification.new("Saved " + str(len(self.pos_dict)) + " entries to redis").show()
         except:
             pass
 
